@@ -33,23 +33,35 @@ app.get('/booking/:BookingId', (req, res) => {
 });
 // Book a ticket
 app.post('/ticket', (req, res) => {
-    const connection = mysql.createConnection(connectionDetails);
-    connection.connect();
+    const { UserId, TrainNo, TicketId, NoOfPassengers, TotalFare, BookingDate } = req.body;
 
-    const { UserId, TrainNo, NoOfPassengers, TotalFare, BookingDate } = req.body;
-    const bookingQuery = `
-        INSERT INTO booking (UserId, TrainNo, NoOfPassengers, TotalFare, BookingDate) 
-        VALUES (?, ?, ?, ?, ?)
-    `;
-    connection.query(bookingQuery, [UserId, TrainNo, NoOfPassengers, TotalFare, BookingDate], (error, result) => {
-        res.setHeader("content-type", "application/json");
-        if (!error) {
-            res.status(201).json({ message: "Ticket booked successfully", BookingId: result.insertId });
-        } else {
-            console.error(error);
-            res.status(500).json(error);
+    // Input validation (basic example)
+    if (!UserId || !TrainNo || !TicketId || !NoOfPassengers || !TotalFare || !BookingDate) {
+        return res.status(400).json({ message: "All fields are required" });
+    }
+
+    const connection = mysql.createConnection(connectionDetails);
+    connection.connect((err) => {
+        if (err) {
+            console.error('Error connecting to the database:', err);
+            return res.status(500).json({ message: "Failed to connect to the database", error: err });
         }
-        connection.end();
+
+        const bookingQuery = `
+            INSERT INTO booking (UserId, TrainNo, TicketId, NoOfPassengers, TotalFare, BookingDate)
+            VALUES (?, ?, ?, ?, ?, ?)
+        `;
+
+        connection.query(bookingQuery, [UserId, TrainNo, TicketId, NoOfPassengers, TotalFare, BookingDate], (error, result) => {
+            res.setHeader("content-type", "application/json");
+            if (!error) {
+                res.status(201).json({ message: "Ticket booked successfully", BookingId: result.insertId });
+            } else {
+                console.error('Error executing query:', error);
+                res.status(500).json({ message: "Internal Server Error", error });
+            }
+            connection.end(); // Close the connection after the query is done
+        });
     });
 });
 
@@ -241,6 +253,42 @@ app.get('/seats/:TrainNo/:ClassId', (req, res) => {
         connection.end();
     });
 });
+
+app.get("/user/:userId/bookings", (req, res) => {
+    const connection = mysql.createConnection(connectionDetails); // Create connection
+    connection.connect();
+
+    const userId = req.params.userId;
+    const query = `
+        SELECT b.BookingId, b.TrainNo, b.TicketId, b.NoOfPassengers, b.BookingDate, b.TotalFare,
+               u.Name, u.EmailId, u.MobileNo, u.City, u.State
+        FROM booking b
+        JOIN user u ON b.UserId = u.UserId
+        WHERE u.UserId = ?;
+    `;
+
+    connection.query(query, [userId], (err, results) => {
+        res.setHeader("content-type", "application/json");
+        if (err) {
+            console.error("Error fetching bookings:", err);
+            return res.status(500).json({ error: "Database query failed" });
+        }
+        if (results.length === 0) {
+            return res.status(404).json({ message: "No bookings found for this user" });
+        }
+
+        // Format the date (remove 'T' and 'Z')
+        results.forEach(result => {
+            result.BookingDate = new Date(result.BookingDate).toLocaleDateString(); // Formats to "MM/DD/YYYY"
+        });
+
+        res.json(results);
+        connection.end(); // Close connection
+    });
+});
+
+
+
 
 // Export the router
 module.exports = app;
