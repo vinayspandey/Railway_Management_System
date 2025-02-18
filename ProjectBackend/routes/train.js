@@ -12,7 +12,40 @@ const connectionDetails = {
     database: config.get("dbname"),
     port: config.get("port"),
 };
+// GET train details by Source and Destination
+app.get("/search", (req, res) => {
+    const { Source, Destination } = req.query;
 
+    console.log("Received search request:", { Source, Destination }); // Debugging log
+
+    if (!Source || !Destination) {
+        return res.status(400).json({ error: "Both Source and Destination are required" });
+    }
+
+    const connection = mysql.createConnection(connectionDetails);
+    connection.connect();
+
+    const queryText = `SELECT * FROM Train WHERE Source LIKE ? AND Destination LIKE ?`;
+    const queryParams = [`%${Source}%`, `%${Destination}%`];
+
+    console.log("Executing SQL:", queryText, queryParams); // Debugging log
+
+    connection.query(queryText, queryParams, (error, result) => {
+        res.setHeader("content-type", "application/json");
+        if (!error) {
+            console.log("Search results:", result); // Debugging log
+            if (result.length > 0) {
+                res.json(result);
+            } else {
+                res.status(404).json({ error: "No trains found for the given Source and Destination" });
+            }
+        } else {
+            console.error("Database error:", error);
+            res.status(500).json({ error: "Database error" });
+        }
+        connection.end();
+    });
+});
 // GET all train details
 app.get("/", (req, res) => {
     const connection = mysql.createConnection(connectionDetails);
@@ -123,5 +156,7 @@ app.put("/:TrainNo", (req, res) => {
         }
     );
 });
+
+
 
 module.exports = app;
